@@ -1,96 +1,84 @@
-import { Button, Layout, List, Menu, MenuProps } from "antd";
-import { PlusOutlined } from '@ant-design/icons';
-import { apiClient } from "./api-client";
-import { useEffect, useState } from "react";
-import { ListForm } from "./ListForm";
-import { TodoForm } from "./TodoForm";
-const { Header, Content, Sider } = Layout;
+// src/App.tsx
+import { Layout } from "antd";
+import { useState } from "react";
+import { Header } from "./components/layout/Header";
+import { Sidebar } from "./components/layout/Sidebar";
+import { ListForm } from "./components/forms/ListForm";
+import { TodoForm } from "./components/forms/TodoForm";
+import { TodoList } from "./components/todo/TodoList";
+import { useLists } from "./hooks/useLists";
+import { useTodos } from "./hooks/useTodos";
+import { TodoList as TodoListType } from "./services/types/list";
 
-type MenuItem = Required<MenuProps>['items'][number];
+const { Content } = Layout;
 
 export default function App() {
-  const [lists, setLists] = useState<string[]>([]);
-  const [selectedList, setSelectedList] = useState<string | null>(null);
   const [showListForm, setShowListForm] = useState(false);
   const [showTodoForm, setShowTodoForm] = useState(false);
-  const [selectedListItems, setSelectedListItems] = useState<string[]>([]);
+  const [selectedList, setSelectedList] = useState<TodoListType | null>(null);
 
-  useEffect(() => {
-    apiClient.getLists().then(setLists);
-  }, []);
-
-  useEffect(() => {
-    if (selectedList) {
-      apiClient.getTodos(selectedList).then(setSelectedListItems);
-    }
-  }, [selectedList]);
-
-  const handleItemClick = (key: string) => {
-    if (key === 'add') {
-      setSelectedList(null);
-      setShowListForm(true);
-    } else {
-      setSelectedList(key);
-    }
-  }
-
-  // TODO: fix any, use type from API
-  const items: MenuItem[] = lists.map((list: any) => ({
-    key: list,
-    label: list
-  }));
-
-  function handleListAdded(listName: string): void {
-    console.debug('-- handleListAdded', listName);
-    apiClient.addList(listName).then((result) => {
-      console.debug('-- handleListAdded result', result);
-      setLists(result)
-    });
-    setShowListForm(false);
-  }
-
-  function handleTodoAdded(todo: string): void {
-    if (selectedList) {
-      apiClient.addTodo(selectedList, todo).then(setSelectedListItems);
-    }
-    setShowTodoForm(false);
-  }
+  const { lists, createList } = useLists();
+  const { todos, createTodo, updateTodo, deleteTodo } = useTodos(
+    selectedList?.id || null
+  );
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center', color: 'white' }}>
-          TODO LISTS
-      </Header>
+    <Layout style={{ minHeight: "100vh" }}>
+      <Header />
       <Layout>
-        <Sider width={200} style={{ background: 'black' }}>
-          <Menu
-            theme="dark"
-            mode="inline"
-            items={[{key: 'add', label: 'Add list', icon: <PlusOutlined />}, ...items]}
-            onClick={(e) => handleItemClick(e.key)}
-          />
-        </Sider>
-        <Content
-          style={{
-          padding: 24,
-          margin: 0,
-          minHeight: 280,
-          }}    
-        >
-          {showListForm && <ListForm onListAdded={handleListAdded} />}
-          {selectedList && 
+        <Sidebar
+          lists={lists}
+          selectedList={selectedList}
+          onListSelect={setSelectedList}
+          onAddList={() => setShowListForm(true)}
+        />
+        <Content style={{ padding: 24 }}>
+          {showListForm && (
+            <ListForm
+              onSubmit={async (name, description) => {
+                await createList(name, description);
+                setShowListForm(false);
+              }}
+              onCancel={() => setShowListForm(false)}
+            />
+          )}
+          {selectedList && (
             <div>
-              <Button onClick={() => setShowTodoForm(true)}>Add Todo</Button>
-              <List
-                dataSource={selectedListItems}
-                renderItem={(item) => <List.Item>{item}</List.Item>}
-              />
+              <h2>{selectedList.name}</h2>
+              {selectedList.description && (
+                <p style={{ color: "#666", marginBottom: 16 }}>
+                  {selectedList.description}
+                </p>
+              )}
+              {showTodoForm ? (
+                <TodoForm
+                  onSubmit={async (description) => {
+                    await createTodo(description);
+                    setShowTodoForm(false);
+                  }}
+                  onCancel={() => setShowTodoForm(false)}
+                />
+              ) : (
+                <TodoList
+                  todos={todos}
+                  onStatusChange={async (todoId, status) => {
+                    await updateTodo(todoId, { status });
+                  }}
+                  onDelete={async (todoId) => {
+                    await deleteTodo(todoId);
+                  }}
+                  onAddTodo={() => setShowTodoForm(true)}
+                />
+              )}
             </div>
-          }
-          {!selectedList && !showListForm && <div>Select a list</div>}    
-          {showTodoForm && <TodoForm onTodoAdded={handleTodoAdded} />}
+          )}
+          {!selectedList && !showListForm && (
+            <div style={{ textAlign: "center", color: "#666", marginTop: 48 }}>
+              Select a list or create a new one
+            </div>
+          )}
         </Content>
       </Layout>
     </Layout>
-  )
+  );
 }
